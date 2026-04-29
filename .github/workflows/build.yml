@@ -1,51 +1,51 @@
-name: build-httptools-arm64
+name: Build httptools for Windows ARM64 (Python 3.14)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 手动触发
 
 jobs:
-  build:
+  build-arm64:
     runs-on: windows-latest
-
+    
     steps:
-      # clone 源码
-      - name: Clone httptools
-        run: git clone https://github.com/MagicStack/httptools.git .
+      - name: Checkout (Optional)
+        uses: actions/checkout@v4
 
-      # Python
-      - name: Setup Python
+      - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: '3.14' # 确保 Python 3.14 已发布或在 actions 中可用
+          check-latest: true
 
-      # 安装最新版 cibuildwheel
-      - name: Install build tools
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -U cibuildwheel
+          python -m pip install cython setuptools wheel
 
-      # 官方推荐：先打印 build identifiers（调试必备）
-      - name: Debug build identifiers
-        env:
-          CIBW_PLATFORM: windows
-          CIBW_ARCHS_WINDOWS: ARM64
-          CIBW_PRERELEASE_PYTHONS: "1"
-        run: cibuildwheel --print-build-identifiers
+      - name: Download httptools source
+        run: |
+          # 从 GitHub 下载最新的源码
+          git clone --recursive https://github.com/MagicStack/httptools.git
+          cd httptools
 
-      # 构建
-      - name: Build wheels
-        env:
-          CIBW_PLATFORM: windows
-          CIBW_ARCHS_WINDOWS: ARM64
-          CIBW_BUILD: cp314*
-          CIBW_PRERELEASE_PYTHONS: "1"
-          CIBW_SKIP: pp* cp36* cp37* cp38* cp39* cp310* cp311* cp312* cp313*
-          CIBW_ENVIRONMENT: DISTUTILS_USE_SDK=1
-        run: cibuildwheel --output-dir wheelhouse
+      - name: Setup MSVC for ARM64
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64_arm64 # 在 x64 机器上通过交叉编译器编译 arm64
 
-      # 上传产物
-      - name: Upload wheel
+      - name: Build Wheel
+        working-directory: ./httptools
+        run: |
+          # 设置环境变量以强制指定平台名称
+          $env:DISTUTILS_USE_SDK=1
+          $env:MSSdk=1
+          
+          # 编译命令：指定平台为 win_arm64
+          # --no-deps 确保不下载依赖，--platform 强制标记
+          python setup.py bdist_wheel --plat-name win_arm64
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: httptools-arm64-wheel
-          path: wheelhouse/*.whl
+          name: httptools-py314-win_arm64
+          path: httptools/dist/*.whl
