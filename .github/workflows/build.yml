@@ -8,29 +8,32 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Clone httptools
-        run: git clone https://github.com/MagicStack/httptools.git .
+      # 不使用 checkout，避免目录冲突
+      - name: Clone httptools source
+        run: git clone https://github.com/MagicStack/httptools.git
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.14"
 
-      - name: Install cibuildwheel
-        run: pip install cibuildwheel==2.19.0
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install cibuildwheel==2.19.0
 
-      - name: Build wheels
+      - name: Build wheels (ARM64)
         env:
           CIBW_PLATFORM: windows
           CIBW_ARCHS_WINDOWS: ARM64
           CIBW_BUILD: cp314-win_arm64
-        run: cibuildwheel --output-dir wheelhouse
+          CIBW_ENVIRONMENT: DISTUTILS_USE_SDK=1
+        run: |
+          cd httptools
+          cibuildwheel --output-dir ../wheelhouse
 
       - name: Upload wheel
         uses: actions/upload-artifact@v4
         with:
-          name: wheel
+          name: httptools-arm64-wheel
           path: wheelhouse/*.whl
