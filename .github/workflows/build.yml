@@ -1,4 +1,4 @@
-name: Force Build httptools Windows ARM64
+name: Build httptools Windows ARM64 (Python 3.14)
 
 on:
   workflow_dispatch:
@@ -14,50 +14,52 @@ jobs:
           repository: MagicStack/httptools
           submodules: recursive
 
-      - name: Set up Host Python (3.14)
+      - name: Set up Host Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
+          python-version: '3.14' # 用于运行编译脚本的宿主
 
       - name: Install Build Tools
         run: |
           python -m pip install --upgrade pip
           python -m pip install cython setuptools wheel
 
-      - name: Prepare ARM64 Python SDK
+      - name: Fetch Python ARM64 Libraries via NuGet
         shell: pwsh
         run: |
-          # 1. 下载 ARM64 运行环境（用于获取 .lib 文件）
-          curl.exe -L -o py_arm64.zip https://www.python.org/ftp/python/3.14.0/python-3.14.0-embed-arm64.zip
-          Expand-Archive py_arm64.zip -DestinationPath py_arm64
+          # 使用 NuGet 下载 ARM64 版本的 Python 开发包
+          # 注意：这里使用了 3.14.0-alpha1，请根据实际版本调整，或使用 -Prerelease 参数
+          mkdir python_arm64_dev
+          nuget install pythonarm64 -Version 3.14.0-alpha1 -OutputDirectory python_arm64_dev -Prerelease
           
-          # 2. 下载 Python 源码/SDK（用于获取 .h 头文件）
-          # 注意：3.14 路径请根据实际发布版本微调，若 404 请检查官网
-          curl.exe -L -o py_inc.zip https://www.python.org/ftp/python/3.14.0/python-3.14.0-amd64-sdk.zip
-          Expand-Archive py_inc.zip -DestinationPath py_inc
+          # 定位 lib 和 include 路径
+          $pkgPath = Get-ChildItem -Path "python_arm64_dev\pythonarm64*" | Select-Object -First 1
+          echo "PYTHON_ARM64_LIB=$($pkgPath.FullName)\tools" >> $env:GITHUB_ENV
+          echo "PYTHON_ARM64_INC=$($pkgPath.FullName)\tools\include" >> $env:GITHUB_ENV
 
       - name: Compile with Forced MSVC ARM64 Environment
-        shell: cmd # 使用 CMD 方便直接 call bat 脚本
+        shell: cmd
         env:
-          # 告诉 Python 构建工具使用我们手动设置的 SDK 环境
           DISTUTILS_USE_SDK: "1"
           MSSdk: "1"
+          # 强制 setuptools 认为自己在 ARM64 环境下执行
+          _PYTHON_SYSCONFIGDATA_NAME: "_sysconfigdata__win_arm64"
         run: |
-          :: 1. 强制初始化 MSVC 为交叉编译模式 (Host x64 -> Target ARM64)
+          :: 1. 初始化交叉编译环境
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64_arm64
           
-          :: 2. 覆盖环境变量，强制指向 ARM64 的库和头文件
-          set "INCLUDE=%CD%\py_inc\Include;%INCLUDE%"
-          set "LIB=%CD%\py_arm64;%LIB%"
+          :: 2. 注入从 NuGet 获取的 ARM64 路径
+          set "INCLUDE=%PYTHON_ARM64_INC%;%INCLUDE%"
+          set "LIB=%PYTHON_ARM64_LIB%;%LIB%"
           
-          :: 3. 检查编译器是否正确加载 (应显示 Target: aarch64-pc-windows-msvc)
+          :: 3. 验证编译器（应显示 Target: aarch64）
           cl.exe
           
-          :: 4. 执行编译并强制指定平台标签
+          :: 4. 编译并打包
           python setup.py bdist_wheel --plat-name win_arm64
-          
-      - name: Upload
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: httptools-win_arm64
+          name: httptools-py314-win_arm64
           path: dist/*.whl
