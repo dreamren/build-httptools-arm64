@@ -1,4 +1,4 @@
-name: Build httptools Windows ARM64 (cibuildwheel)
+name: Build httptools Windows ARM64
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.14' # 仅作为运行 cibuildwheel 的宿主
+          python-version: '3.14'
 
       - name: Install cibuildwheel
         run: python -m pip install cibuildwheel==3.4.1
@@ -24,25 +24,21 @@ jobs:
       - name: Build wheels
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
-          # 1. 允许 ARM64 架构
           CIBW_ARCHS_WINDOWS: "ARM64"
-          
-          # 2. 只构建 cp314
           CIBW_BUILD: "cp314-win_arm64"
-          
-          # 3. 这里的 CIBW_SKIP 必须为空，或者不要包含 win_arm64
-          CIBW_SKIP: ""
-          
-          # 4. 交叉编译必须跳过测试，否则会因架构不匹配报错
           CIBW_TEST_SKIP: "*-win_arm64"
           
-          # 5. 编译环境配置
+          # 重要：禁用 PEP 517 构建隔离
+          # 这样 build 会使用 before_build 环境中已有的 cython，避免重复下载和编译器丢失
+          CIBW_CONFIG_SETTINGS_WINDOWS: "--build-option=--no-build-isolation"
+          
           CIBW_ENVIRONMENT_WINDOWS: >
             DISTUTILS_USE_SDK="1"
             MSSdk="1"
+            _PYTHON_SYSCONFIGDATA_NAME="_sysconfigdata__win_arm64"
           
-          # 6. httptools 必须安装 cython 才能编译
-          CIBW_BEFORE_BUILD: "pip install cython setuptools"
+          # 在构建环境准备好后，显式安装最新版依赖
+          CIBW_BEFORE_BUILD: "pip install cython>=3.0.0 setuptools>=70.0.0 wheel"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
