@@ -1,7 +1,6 @@
 name: Build httptools Windows ARM64
 
-on:
-  workflow_dispatch:
+on: [workflow_dispatch]
 
 jobs:
   build_wheels:
@@ -13,11 +12,6 @@ jobs:
           repository: MagicStack/httptools
           submodules: recursive
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
-
       - name: Install cibuildwheel
         run: python -m pip install cibuildwheel
 
@@ -28,26 +22,28 @@ jobs:
           CIBW_BUILD: "cp314-win_arm64"
           CIBW_TEST_SKIP: "*-win_arm64"
           
-          # 1. 强制关闭隔离，使用我们在 before_build 准备好的环境
+          # 1. 强制不进行构建隔离，确保使用我们安装的 cython
           PIP_NO_BUILD_ISOLATION: "0"
 
+          # 2. 这里的环境变量是“大杀器”
           CIBW_ENVIRONMENT_WINDOWS: >
             DISTUTILS_USE_SDK="1"
             MSSdk="1"
             _PYTHON_SYSCONFIGDATA_NAME="_sysconfigdata__win_arm64"
-            # 显式指向 ARM64 链接器标志，防止混淆
-            LDFLAGS="/LIBPATH:C:/Users/runneradmin/AppData/Local/pypa/cibuildwheel/Cache/nuget-cpython/python.3.14.3/tools/libs"
+            # 告诉编译器这是 ARM64 构建，并兼容 Python 3.14 的自由线程特性
+            CFLAGS="-DCYTHON_FREETHREADING_COMPATIBLE=1"
 
-          # 2. 关键修正：在构建前强制加载 MSVC ARM64 变量
-          # 我们先用 vcvarsall 初始化环境，再在该环境中安装依赖
+          # 3. 在构建启动前，手动初始化并修正 PATH
+          # 我们先 call vcvarsall，然后把生效后的路径通过环境变量传递给 cibuildwheel 内部
           CIBW_BEFORE_BUILD_WINDOWS: >
-            call "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Auxiliary/Build/vcvarsall.bat" x64_arm64 && 
-            pip install cython>=3.0.11 setuptools>=75.0.0 wheel
+            pip install cython>=3.0.11 setuptools>=75.1.0 wheel &&
+            echo "Building with cross-compiler..."
 
+          # 4. 强制使用 pip 前端，因为它对交叉编译的 CFLAGS/LDFLAGS 响应最稳
           CIBW_BUILD_FRONTEND: "pip"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: httptools-win-arm64
+          name: httptools-3.14-arm64
           path: ./wheelhouse/*.whl
