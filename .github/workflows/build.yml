@@ -8,7 +8,11 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone httptools
+        run: git clone https://github.com/MagicStack/httptools.git .
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -20,7 +24,6 @@ jobs:
 
       - name: Build wheels
         env:
-          CIBW_ENVIRONMENT: "DISTUTILS_USE_SDK=1"
           CIBW_PLATFORM: windows
           CIBW_ARCHS_WINDOWS: ARM64
           CIBW_BUILD: cp314-win_arm64
@@ -29,5 +32,5 @@ jobs:
       - name: Upload wheel
         uses: actions/upload-artifact@v4
         with:
-          name: httptools-wheel
+          name: wheel
           path: wheelhouse/*.whl
