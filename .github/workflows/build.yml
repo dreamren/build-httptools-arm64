@@ -1,0 +1,32 @@
+name: build-httptools-arm64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install cibuildwheel
+        run: pip install cibuildwheel==2.19.0
+
+      - name: Build wheels
+        env:
+          CIBW_PLATFORM: windows
+          CIBW_ARCHS_WINDOWS: ARM64
+          CIBW_BUILD: cp314-win_arm64
+        run: cibuildwheel --output-dir wheelhouse
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: httptools-wheel
+          path: wheelhouse/*.whl
