@@ -17,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12' # 宿主 Python 版本随意，cibuildwheel 会自己下 3.14
+          python-version: '3.14' # 宿主 Python 版本随意，cibuildwheel 会自己下 3.14
 
       - name: Install cibuildwheel
         run: python -m pip install cibuildwheel
@@ -25,19 +25,23 @@ jobs:
       - name: Build wheels
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
-          # 只编译 Python 3.14 的 Windows ARM64 版本
-          # CP314-* 匹配 Python 3.14
-          # win_arm64 匹配目标架构
+          # 1. 核心修正：手动开启 ARM64 架构支持
+          CIBW_ARCHS_WINDOWS: "ARM64"
+          
+          # 2. 指定构建目标
           CIBW_BUILD: "cp314-win_arm64"
           
-          # 强制 cibuildwheel 在构建前安装必要的编译依赖
-          CIBW_BEFORE_BUILD: "pip install cython setuptools"
-          
-          # 针对 Windows ARM64 的交叉编译修复
-          # cibuildwheel 会自动调用 vcvarsall.bat x64_arm64
+          # 3. 这里的环境设置对于交叉编译非常重要
           CIBW_ENVIRONMENT_WINDOWS: >
             DISTUTILS_USE_SDK="1"
             MSSdk="1"
+            
+          # 4. 构建前的依赖安装
+          CIBW_BEFORE_BUILD: "pip install cython setuptools"
+          
+          # 5. 跳过测试（因为 x64 机器跑不了 ARM64 二进制文件）
+          CIBW_SKIP: "*-win_arm64"
+          CIBW_TEST_SKIP: "*-win_arm64"
 
       - uses: actions/upload-artifact@v4
         with:
