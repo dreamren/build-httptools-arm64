@@ -38,25 +38,24 @@ jobs:
           CIBW_BUILD: "cp314-win_arm64"
           CIBW_TEST_SKIP: "*-win_arm64"
           
-          # 1. 核心修正：直接通过环境变量传递 CMake 参数，而不是命令行
+          # 核心环境变量注入
           CIBW_ENVIRONMENT_WINDOWS: >
             DISTUTILS_USE_SDK="1"
             MSSdk="1"
             _PYTHON_SYSCONFIGDATA_NAME="_sysconfigdata__win_arm64"
             CMAKE_GENERATOR="Ninja"
             OPENCV_PYTHON_SKIP_DETECTION="ON"
-            # 将所有 CMake 参数写在这里，注意 Windows 下使用分号分隔多个参数
+            # 这种写法是 OpenCV 脚本识别的 CMake 参数传递方式
             CMAKE_ARGS="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64 -DOPENCV_FORCE_PYTHON_LIBS=ON -DBUILD_opencv_world=ON"
 
-          # 2. 依然保持关闭隔离，使用我们预装的环境
+          # 关闭构建隔离，确保 setup.py 能看到 venv 里的包
           PIP_NO_BUILD_ISOLATION: "0"
           
-          # 3. 构建前准备
-          # 增加 scikit-build-core，这是目前 OpenCV 推荐的现代构建后端依赖
+          # 修正：必须安装 scikit-build 而不仅仅是 scikit-build-core
+          # 另外一定要带上 ninja，它是交叉编译最稳定的生成器
           CIBW_BEFORE_BUILD_WINDOWS: >
-            pip install cython>=3.0.11 setuptools>=75.1.0 wheel scikit-build-core numpy>=2.1.0
+            pip install cython>=3.0.11 setuptools>=75.1.0 wheel cmake ninja numpy>=2.1.0 scikit-build
 
-          # 4. 移除之前报错的 CIBW_CONFIG_SETTINGS
           CIBW_BUILD_FRONTEND: "pip"
 
       - name: Upload Artifact
