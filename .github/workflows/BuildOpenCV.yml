@@ -30,33 +30,33 @@ jobs:
       - name: Install Build Tools
         run: |
           python -m pip install cibuildwheel==3.4.1 cmake ninja
-
+          
       - name: Build wheels
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
           CIBW_ARCHS_WINDOWS: "ARM64"
           CIBW_BUILD: "cp314-win_arm64"
           CIBW_TEST_SKIP: "*-win_arm64"
-
-          # 2. 关键环境变量：强制 CMake 使用 ARM64 架构
+          
+          # 1. 核心修正：直接通过环境变量传递 CMake 参数，而不是命令行
           CIBW_ENVIRONMENT_WINDOWS: >
             DISTUTILS_USE_SDK="1"
             MSSdk="1"
             _PYTHON_SYSCONFIGDATA_NAME="_sysconfigdata__win_arm64"
             CMAKE_GENERATOR="Ninja"
-            # 告诉 OpenCV 构建脚本不要去检测宿主机的架构
             OPENCV_PYTHON_SKIP_DETECTION="ON"
+            # 将所有 CMake 参数写在这里，注意 Windows 下使用分号分隔多个参数
+            CMAKE_ARGS="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64 -DOPENCV_FORCE_PYTHON_LIBS=ON -DBUILD_opencv_world=ON"
 
-          # 3. 注入 CMake 参数
-          # 这些参数会传递给 opencv-python 的 setup.py，进而传给底层的 CMake 调用
-          CIBW_CONFIG_SETTINGS_WINDOWS: >
-            --build-option=--cmake-args="-DCMAKE_SYSTEM_NAME=Windows;-DCMAKE_SYSTEM_PROCESSOR=ARM64;-DOPENCV_FORCE_PYTHON_LIBS=ON"
-
-          # 4. 构建前准备
-          # OpenCV 构建需要大量的内存和工具，这里安装基础依赖
+          # 2. 依然保持关闭隔离，使用我们预装的环境
+          PIP_NO_BUILD_ISOLATION: "0"
+          
+          # 3. 构建前准备
+          # 增加 scikit-build-core，这是目前 OpenCV 推荐的现代构建后端依赖
           CIBW_BEFORE_BUILD_WINDOWS: >
-            pip install numpy>=2.1.0 setuptools>=75.1.0 wheel scikit-build
+            pip install cython>=3.0.11 setuptools>=75.1.0 wheel scikit-build-core numpy>=2.1.0
 
+          # 4. 移除之前报错的 CIBW_CONFIG_SETTINGS
           CIBW_BUILD_FRONTEND: "pip"
 
       - name: Upload Artifact
