@@ -1,0 +1,66 @@
+name: Build OpenCV-Python Windows ARM64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build_wheels:
+    name: Build OpenCV for Windows ARM64
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 注意：opencv-python 建议使用 --recursive 抓取所有子模块（包括 opencv 本身）
+          repository: opencv/opencv-python
+          submodules: recursive
+          fetch-depth: 0
+
+      # 1. 核心：启用 MSVC x64_arm64 交叉编译工具链
+      - name: Enable MSVC ARM64
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64_arm64
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Build Tools
+        run: |
+          python -m pip install cibuildwheel==3.4.1 cmake ninja
+
+      - name: Build wheels
+        run: python -m cibuildwheel --output-dir wheelhouse
+        env:
+          CIBW_ARCHS_WINDOWS: "ARM64"
+          CIBW_BUILD: "cp314-win_arm64"
+          CIBW_TEST_SKIP: "*-win_arm64"
+
+          # 2. 关键环境变量：强制 CMake 使用 ARM64 架构
+          CIBW_ENVIRONMENT_WINDOWS: >
+            DISTUTILS_USE_SDK="1"
+            MSSdk="1"
+            _PYTHON_SYSCONFIGDATA_NAME="_sysconfigdata__win_arm64"
+            CMAKE_GENERATOR="Ninja"
+            # 告诉 OpenCV 构建脚本不要去检测宿主机的架构
+            OPENCV_PYTHON_SKIP_DETECTION="ON"
+
+          # 3. 注入 CMake 参数
+          # 这些参数会传递给 opencv-python 的 setup.py，进而传给底层的 CMake 调用
+          CIBW_CONFIG_SETTINGS_WINDOWS: >
+            --build-option=--cmake-args="-DCMAKE_SYSTEM_NAME=Windows;-DCMAKE_SYSTEM_PROCESSOR=ARM64;-DOPENCV_FORCE_PYTHON_LIBS=ON"
+
+          # 4. 构建前准备
+          # OpenCV 构建需要大量的内存和工具，这里安装基础依赖
+          CIBW_BEFORE_BUILD_WINDOWS: >
+            pip install numpy>=2.1.0 setuptools>=75.1.0 wheel scikit-build
+
+          CIBW_BUILD_FRONTEND: "pip"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencv-python-3.14-win_arm64
+          path: ./wheelhouse/*.whl
