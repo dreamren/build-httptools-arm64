@@ -1,23 +1,23 @@
-name: Build OpenCV-Python Windows ARM64
+name: Build OpenCV-Python Windows ARM64 (Ultimate Fixed)
 
 on:
   workflow_dispatch:
 
 jobs:
   build_wheels:
-    name: Build OpenCV for Windows ARM64
+    name: Build wheels on windows-latest
     runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
         with:
-          # 注意：opencv-python 建议使用 --recursive 抓取所有子模块（包括 opencv 本身）
+          # 必须使用 opencv-python 仓库并递归子模块
           repository: opencv/opencv-python
           submodules: recursive
           fetch-depth: 0
 
-      # 1. 核心：启用 MSVC x64_arm64 交叉编译工具链
-      - name: Enable MSVC ARM64
+      # 1. 核心步骤：启用 MSVC 的 x64_arm64 交叉编译环境
+      - name: Enable MSVC ARM64 Cross-Compiler
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64_arm64
@@ -27,10 +27,9 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Build Tools
-        run: |
-          python -m pip install cibuildwheel==3.4.1 cmake ninja
-          
+      - name: Install cibuildwheel
+        run: python -m pip install cibuildwheel==3.4.1
+
       - name: Build wheels
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
@@ -38,24 +37,30 @@ jobs:
           CIBW_BUILD: "cp314-win_arm64"
           CIBW_TEST_SKIP: "*-win_arm64"
           
-          # 核心环境变量注入
+          # 2. 核心修正：通过环境变量彻底接管构建过程
           CIBW_ENVIRONMENT_WINDOWS: >
             DISTUTILS_USE_SDK="1"
             MSSdk="1"
             _PYTHON_SYSCONFIGDATA_NAME="_sysconfigdata__win_arm64"
+            # 强制 scikit-build 使用原始 Ninja，避免它乱传 -A x64 参数
+            SKBUILD_GENERATOR="Ninja"
             CMAKE_GENERATOR="Ninja"
+            # 屏蔽 OpenCV 内部的宿主机架构检测
             OPENCV_PYTHON_SKIP_DETECTION="ON"
-            # 这种写法是 OpenCV 脚本识别的 CMake 参数传递方式
-            CMAKE_ARGS="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64 -DOPENCV_FORCE_PYTHON_LIBS=ON -DBUILD_opencv_world=ON"
+            # 显式注入 ARM64 编译参数
+            CMAKE_ARGS="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64 -DOPENCV_FORCE_PYTHON_LIBS=ON -DBUILD_opencv_world=ON -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF -DBUILD_DOCS=OFF"
+            # 适配 Python 3.14 自由线程
+            CFLAGS="-DCYTHON_FREETHREADING_COMPATIBLE=1"
 
-          # 关闭构建隔离，确保 setup.py 能看到 venv 里的包
+          # 3. 禁用构建隔离，使用我们在 BEFORE_BUILD 中准备好的环境
           PIP_NO_BUILD_ISOLATION: "0"
           
-          # 修正：必须安装 scikit-build 而不仅仅是 scikit-build-core
-          # 另外一定要带上 ninja，它是交叉编译最稳定的生成器
+          # 4. 构建前准备：安装所有必须的构建工具
+          # 注意：必须同时安装 scikit-build (旧版) 以满足 import skbuild 的需求
           CIBW_BEFORE_BUILD_WINDOWS: >
             pip install cython>=3.0.11 setuptools>=75.1.0 wheel cmake ninja numpy>=2.1.0 scikit-build
 
+          # 5. 使用 pip 作为前端
           CIBW_BUILD_FRONTEND: "pip"
 
       - name: Upload Artifact
